@@ -44,6 +44,11 @@ app.get("/status", (req, res) => {
   res.json({ status: "API Vendor is running" });
 });
 
+router.get('/vendor-b/dummy', (req, res) => {
+  res.json(productsVendorB);
+});
+
+
 /* =============================================================
    GET ALL PRODUCTS (Vendor B)
 ============================================================= */
