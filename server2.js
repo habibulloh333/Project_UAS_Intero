@@ -7,62 +7,31 @@ const jwt = require('jsonwebtoken');
 const { authenticateToken, authorizeRole } = require('./auth.js');
 
 const app = express();
-const router = express.Router();
 const PORT = process.env.PORT || 3300;
-
-// === ARRAY DUMMY VENDOR B (MAHASISWA 2) ===
-const productsVendorB = [
-  {
-    sku: "TSHIRT-001",
-    productName: "Kaos Ijen Crater",
-    price: 75000,
-    isAvailable: "Tersedia"
-  },
-  {
-    sku: "TSHIRT-002",
-    productName: "Hoodie Merah Banyuwangi",
-    price: 150000,
-    isAvailable: "Tidak"
-  },
-  {
-    sku: "TSHIRT-003",
-    productName: "Kaos Gandrung Banyuwangi",
-    price: 82000,
-    isAvailable: "Tersedia"
-  }
-];
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // === MIDDLEWARE ===
 app.use(cors());
 app.use(express.json());
-
-// PASANG ROUTER KE APP ✔ WAJIB ADA
-app.use(router);
 
 // Endpoint status 
 app.get("/status", (req, res) => {
   res.json({ status: "API Vendor is running" });
 });
 
-router.get('/vendor-b/dummy', (req, res) => {
-  res.json(productsVendorB);
-});
-
-
 /* =============================================================
    GET ALL PRODUCTS (Vendor B)
 ============================================================= */
-router.get('/vendor-b/products', async (req, res, next) => {
+app.get('/vendor-b/fashion', async (req, res, next) => {
   const sql = `
     SELECT 
-      id,
       sku,
       product_name AS "productName",
       price,
       is_available AS "isAvailable",
       created_at
     FROM vendor_b_products
-    ORDER BY id ASC
+    ORDER BY sku ASC
   `;
 
   try {
@@ -74,23 +43,22 @@ router.get('/vendor-b/products', async (req, res, next) => {
 });
 
 /* =============================================================
-   GET PRODUCT BY ID
+   GET PRODUCT BY SKU
 ============================================================= */
-router.get('/vendor-b/products/:id', async (req, res, next) => {
+app.get('/vendor-b/fashion/:sku', async (req, res, next) => {
   const sql = `
     SELECT 
-      id,
       sku,
       product_name AS "productName",
       price,
       is_available AS "isAvailable",
       created_at
     FROM vendor_b_products
-    WHERE id = $1
+    WHERE sku = $1
   `;
 
   try {
-    const result = await db.query(sql, [req.params.id]);
+    const result = await db.query(sql, [req.params.sku]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Produk tidak ditemukan" });
     }
@@ -101,9 +69,9 @@ router.get('/vendor-b/products/:id', async (req, res, next) => {
 });
 
 /* =============================================================
-   CREATE PRODUCT
+   CREATE PRODUCT (menggunakan SKU sebagai primary unique key)
 ============================================================= */
-router.post('/vendor-b/products', authenticateToken, async (req, res, next) => {
+app.post('/vendor-b/fashion', authenticateToken, async (req, res, next) => {
   const { sku, productName, price, isAvailable } = req.body;
 
   if (!sku || !productName || !price || !isAvailable) {
@@ -115,7 +83,7 @@ router.post('/vendor-b/products', authenticateToken, async (req, res, next) => {
   const sql = `
     INSERT INTO vendor_b_products (sku, product_name, price, is_available)
     VALUES ($1, $2, $3, $4)
-    RETURNING id, sku, product_name AS "productName", price, is_available AS "isAvailable"
+    RETURNING sku, product_name AS "productName", price, is_available AS "isAvailable"
   `;
 
   try {
@@ -135,29 +103,28 @@ router.post('/vendor-b/products', authenticateToken, async (req, res, next) => {
 });
 
 /* =============================================================
-   UPDATE PRODUCT
+   UPDATE PRODUCT by SKU
 ============================================================= */
-router.put('/vendor-b/products/:id',
+app.put('/vendor-b/fashion/:sku',
   authenticateToken,
   authorizeRole('admin'),
   async (req, res, next) => {
 
-    const { sku, productName, price, isAvailable } = req.body;
+    const { productName, price, isAvailable } = req.body;
 
     const sql = `
       UPDATE vendor_b_products
-      SET sku = $1, product_name = $2, price = $3, is_available = $4
-      WHERE id = $5
-      RETURNING id, sku, product_name AS "productName", price, is_available AS "isAvailable"
+      SET product_name = $1, price = $2, is_available = $3
+      WHERE sku = $4
+      RETURNING sku, product_name AS "productName", price, is_available AS "isAvailable"
     `;
 
     try {
       const result = await db.query(sql, [
-        sku,
         productName,
         price,
         isAvailable,
-        req.params.id
+        req.params.sku
       ]);
 
       if (result.rowCount === 0) {
@@ -171,17 +138,17 @@ router.put('/vendor-b/products/:id',
 });
 
 /* =============================================================
-   DELETE PRODUCT
+   DELETE PRODUCT by SKU
 ============================================================= */
-router.delete('/vendor-b/products/:id',
+app.delete('/vendor-b/fashion/:sku',
   authenticateToken,
   authorizeRole('admin'),
   async (req, res, next) => {
 
-    const sql = `DELETE FROM vendor_b_products WHERE id = $1 RETURNING *`;
+    const sql = `DELETE FROM vendor_b_products WHERE sku = $1 RETURNING *`;
 
     try {
-      const result = await db.query(sql, [req.params.id]);
+      const result = await db.query(sql, [req.params.sku]);
 
       if (result.rowCount === 0) {
         return res.status(404).json({ error: "Produk tidak ditemukan" });
