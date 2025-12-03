@@ -1,28 +1,30 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const router = express.Router();
-const db = require('db.js');
+const db = require('./db.js');                 // ✔ path sudah benar
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { authenticateToken, authorizeRole } = require('auth.js');
+const { authenticateToken, authorizeRole } = require('./middleware/auth.js'); // ✔ path benar
 
 const app = express();
+const router = express.Router();
 const PORT = process.env.PORT || 3300;
-const JWT_SECRET = process.env.JWT_SECRET;
 
 // === MIDDLEWARE ===
 app.use(cors());
 app.use(express.json());
+
+// PASANG ROUTER KE APP ✔ WAJIB ADA
+app.use(router);
 
 // Endpoint status 
 app.get("/status", (req, res) => {
   res.json({ status: "API Vendor is running" });
 });
 
-// ======================================================================
-// GET ALL PRODUCTS
-// ======================================================================
+/* =============================================================
+   GET ALL PRODUCTS (Vendor B)
+============================================================= */
 router.get('/vendor-b/products', async (req, res, next) => {
   const sql = `
     SELECT 
@@ -35,6 +37,7 @@ router.get('/vendor-b/products', async (req, res, next) => {
     FROM vendor_b_products
     ORDER BY id ASC
   `;
+
   try {
     const result = await db.query(sql);
     res.json(result.rows);
@@ -43,9 +46,9 @@ router.get('/vendor-b/products', async (req, res, next) => {
   }
 });
 
-// ======================================================================
-// GET PRODUCT BY ID
-// ======================================================================
+/* =============================================================
+   GET PRODUCT BY ID
+============================================================= */
 router.get('/vendor-b/products/:id', async (req, res, next) => {
   const sql = `
     SELECT 
@@ -70,9 +73,9 @@ router.get('/vendor-b/products/:id', async (req, res, next) => {
   }
 });
 
-// ======================================================================
-// CREATE PRODUCT (Vendor B)
-// ======================================================================
+/* =============================================================
+   CREATE PRODUCT
+============================================================= */
 router.post('/vendor-b/products', authenticateToken, async (req, res, next) => {
   const { sku, productName, price, isAvailable } = req.body;
 
@@ -93,7 +96,7 @@ router.post('/vendor-b/products', authenticateToken, async (req, res, next) => {
       sku,
       productName,
       price,
-      isAvailable // "Tersedia" / "Tidak"
+      isAvailable
     ]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -104,59 +107,64 @@ router.post('/vendor-b/products', authenticateToken, async (req, res, next) => {
   }
 });
 
-// ======================================================================
-// UPDATE PRODUCT
-// ======================================================================
-router.put('/vendor-b/products/:id', [authenticateToken, authorizeRole('admin')], async (req, res, next) => {
-  const { sku, productName, price, isAvailable } = req.body;
+/* =============================================================
+   UPDATE PRODUCT
+============================================================= */
+router.put('/vendor-b/products/:id',
+  authenticateToken,
+  authorizeRole('admin'),
+  async (req, res, next) => {
 
-  const sql = `
-    UPDATE vendor_b_products
-    SET sku = $1, product_name = $2, price = $3, is_available = $4
-    WHERE id = $5
-    RETURNING id, sku, product_name AS "productName", price, is_available AS "isAvailable"
-  `;
+    const { sku, productName, price, isAvailable } = req.body;
 
-  try {
-    const result = await db.query(sql, [
-      sku,
-      productName,
-      price,
-      isAvailable,
-      req.params.id
-    ]);
+    const sql = `
+      UPDATE vendor_b_products
+      SET sku = $1, product_name = $2, price = $3, is_available = $4
+      WHERE id = $5
+      RETURNING id, sku, product_name AS "productName", price, is_available AS "isAvailable"
+    `;
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Produk tidak ditemukan' });
+    try {
+      const result = await db.query(sql, [
+        sku,
+        productName,
+        price,
+        isAvailable,
+        req.params.id
+      ]);
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: "Produk tidak ditemukan" });
+      }
+
+      res.json(result.rows[0]);
+    } catch (err) {
+      next(err);
     }
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    next(err);
-  }
 });
 
-// ======================================================================
-// DELETE PRODUCT
-// ======================================================================
-router.delete('/vendor-b/products/:id', [authenticateToken, authorizeRole('admin')], async (req, res, next) => {
-  const sql = 'DELETE FROM vendor_b_products WHERE id = $1 RETURNING *';
+/* =============================================================
+   DELETE PRODUCT
+============================================================= */
+router.delete('/vendor-b/products/:id',
+  authenticateToken,
+  authorizeRole('admin'),
+  async (req, res, next) => {
 
-  try {
-    const result = await db.query(sql, [req.params.id]);
+    const sql = `DELETE FROM vendor_b_products WHERE id = $1 RETURNING *`;
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Produk tidak ditemukan' });
+    try {
+      const result = await db.query(sql, [req.params.id]);
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: "Produk tidak ditemukan" });
+      }
+
+      res.status(204).send();
+    } catch (err) {
+      next(err);
     }
-
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
 });
-
-module.exports = router;
-
 
 // === FALLBACK & ERROR HANDLING ===
 app.use((req, res) => {
@@ -168,6 +176,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Terjadi kesalahan pada server' });
 });
 
+// === START SERVER ===
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server aktif di http://localhost:${PORT}`);
 });
