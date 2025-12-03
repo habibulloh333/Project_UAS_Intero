@@ -211,8 +211,8 @@ app.post(
 // Endpoint: PUT /api/vendor-a/products/:kd_produk
 // Body: { "nm_brg": "...", "hrg": "...", "ket_stok": "..." } (kd_produk tidak bisa diubah)
 app.put(
-  "/api/vendor-a/products/:kd_produk",
-  authenticateToken,
+  "/api/vendor-a/products/:kd_produk", 
+  [authenticateToken, authorizeRole("admin")],   
   async (req, res, next) => {
     const { kd_produk } = req.params;
     const { nm_brg, hrg, ket_stok } = req.body; // kd_produk tidak diambil dari body
@@ -277,7 +277,7 @@ app.put(
 // Endpoint: DELETE /api/vendor-a/products/:kd_produk
 app.delete(
   "/api/vendor-a/products/:kd_produk",
-  authenticateToken,
+  [authenticateToken, authorizeRole("admin")],
   async (req, res, next) => {
     const { kd_produk } = req.params;
     console.log(
