@@ -10,6 +10,28 @@ const app = express();
 const router = express.Router();
 const PORT = process.env.PORT || 3300;
 
+// === ARRAY DUMMY VENDOR B (MAHASISWA 2) ===
+const productsVendorB = [
+  {
+    sku: "TSHIRT-001",
+    productName: "Kaos Ijen Crater",
+    price: 75000,
+    isAvailable: "Tersedia"
+  },
+  {
+    sku: "TSHIRT-002",
+    productName: "Hoodie Merah Banyuwangi",
+    price: 150000,
+    isAvailable: "Tidak"
+  },
+  {
+    sku: "TSHIRT-003",
+    productName: "Kaos Gandrung Banyuwangi",
+    price: 82000,
+    isAvailable: "Tersedia"
+  }
+];
+
 // === MIDDLEWARE ===
 app.use(cors());
 app.use(express.json());
