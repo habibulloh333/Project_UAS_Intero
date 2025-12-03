@@ -4,6 +4,7 @@ const cors = require("cors");
 const db = require("./db.js");
 const app = express();
 const PORT = process.env.PORT || 3300;
+const JWT_SECRET = process.env.JWT_SECRET;
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { authenticateToken, authorizeRole } = require('./auth.js');
