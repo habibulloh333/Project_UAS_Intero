@@ -1,11 +1,11 @@
-// vendor-c/vendor_c.js (Revisi dengan Neon PostgreSQL)
+// vendor-c/vendor_c.js (Revisi Akhir dengan PostgreSQL/Neon)
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { Client, Pool } = require('pg'); // Import library 'pg'
-const { authenticateToken, authorizeRole } = require('./auth.js'); // Diperbaiki path-nya
+const { Pool } = require('pg'); // Library PostgreSQL
+const { authenticateToken, authorizeRole } = require('./middleware/auth.js'); // Pastikan path ini benar!
 
 const app = express();
 const PORT = process.env.PORT_VENDOR_C || 3003;
@@ -17,11 +17,11 @@ if (!DATABASE_URL) {
     process.exit(1);
 }
 
-// Gunakan Pool untuk koneksi database yang efisien
+// Inisialisasi Pool Koneksi Database Neon
 const pool = new Pool({
     connectionString: DATABASE_URL,
     ssl: {
-        rejectUnauthorized: false // Atur ke true jika tidak menggunakan sslmode=require
+        rejectUnauthorized: false
     }
 });
 
@@ -30,56 +30,44 @@ app.use(cors());
 app.use(express.json());
 
 // ============================================
-// === IN-MEMORY STORAGE (Hanya untuk Users) ===
-// ============================================
-
-// Users tetap di memori untuk demo auth sederhana
-let users = [
-    { 
-        id: 1, 
-        username: 'vendorc', 
-        password: '$2a$10$ABC123...', // hashed: resto123
-        role: 'user' 
-    },
-    { 
-        id: 2, 
-        username: 'adminresto', 
-        password: '$2a$10$XYZ789...', // hashed: admin123
-        role: 'admin' 
-    }
-];
-
-// ============================================
 // === HELPER & DATABASE FUNCTIONS ===
 // ============================================
 
 /**
- * Membuat tabel 'products' jika belum ada di database Neon.
- * Ini memastikan tabel sudah siap saat server dijalankan.
+ * Membuat tabel 'products' jika belum ada.
  */
 async function createProductsTable() {
-    try {
-        const query = `
-            CREATE TABLE IF NOT EXISTS products (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                category VARCHAR(255) NOT NULL,
-                base_price INTEGER NOT NULL,
-                tax INTEGER NOT NULL,
-                harga_final INTEGER NOT NULL,
-                stock INTEGER NOT NULL,
-                created_by VARCHAR(255),
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_by VARCHAR(255),
-                updated_at TIMESTAMP WITH TIME ZONE
-            );
-        `;
-        await pool.query(query);
-        console.log("✅ Tabel 'products' sudah siap atau berhasil dibuat.");
-    } catch (err) {
-        console.error("❌ Gagal membuat tabel 'products':", err.message);
-        throw err;
-    }
+    const query = `
+        CREATE TABLE IF NOT EXISTS products (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            category VARCHAR(255) NOT NULL,
+            base_price INTEGER NOT NULL,
+            tax INTEGER NOT NULL,
+            harga_final INTEGER NOT NULL,
+            stock INTEGER NOT NULL,
+            created_by VARCHAR(255),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_by VARCHAR(255),
+            updated_at TIMESTAMP WITH TIME ZONE
+        );
+    `;
+    await pool.query(query);
+}
+
+/**
+ * Membuat tabel 'users' jika belum ada.
+ */
+async function createUsersTable() {
+    const query = `
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(255) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            role VARCHAR(50) NOT NULL DEFAULT 'user'
+        );
+    `;
+    await pool.query(query);
 }
 
 const calculateFinalPrice = (base_price, tax) => {
@@ -104,7 +92,6 @@ const formatProductResponse = (dbProduct) => ({
     stock: dbProduct.stock,
     created_by: dbProduct.created_by,
     created_at: dbProduct.created_at
-    // updated_by dan updated_at bisa ditambahkan jika ada
 });
 
 // ============================================
@@ -116,7 +103,7 @@ app.get('/status', async (req, res) => {
         const result = await pool.query('SELECT COUNT(*) FROM products');
         totalProducts = parseInt(result.rows[0].count);
     } catch (e) {
-        // Abaikan jika tabel belum dibuat, anggap 0
+        // Abaikan jika tabel belum dibuat
     }
 
     res.json({ 
@@ -128,105 +115,128 @@ app.get('/status', async (req, res) => {
 });
 
 // ============================================
-// === AUTH ROUTES (Tetap In-Memory) ===
+// === AUTH ROUTES (CRUD ke NEON) ===
 // ============================================
 
-// ... (Kode untuk /auth/register, /auth/register-admin, dan /auth/login tetap sama)
-// Karena logika ini melibatkan hashing dan JWT, kita biarkan saja seperti sebelumnya
-
-app.post('/auth/register', async (req, res) => {
-    const { username, password } = req.body;
+// Register User (Data masuk ke Neon)
+app.post("/auth/register", async (req, res, next) => {
+    const { username, password } = req.body; 
+    
     if (!username || !password || password.length < 6) {
-        return res.status(400).json({ error: 'Username dan password (min 6 karakter) wajib diisi' });
+        return res
+            .status(400)
+            .json({ error: "Username dan password (min 6 char) harus diisi" });
     }
-    const existingUser = users.find(u => u.username === username.toLowerCase());
-    if (existingUser) {
-        return res.status(409).json({ error: 'Username sudah digunakan' });
-    }
+    
     try {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-        const newUser = {
-            id: users.length + 1,
-            username: username.toLowerCase(),
-            password: hashedPassword,
-            role: 'user'
-        };
-        users.push(newUser);
+        
+        const sql =
+            "INSERT INTO users (username, password, role) VALUES ($1, $2, $3) RETURNING id, username, role";
+        const result = await pool.query(sql, [
+            username.toLowerCase(),
+            hashedPassword,
+            "user", 
+        ]);
+        
         res.status(201).json({
             success: true,
             message: '✅ Registrasi berhasil!',
-            user: { id: newUser.id, username: newUser.username, role: newUser.role }
+            user: result.rows[0]
         });
     } catch (err) {
-        res.status(500).json({ error: 'Registrasi gagal: ' + err.message });
+        if (err.code === "23505") { // Unique violation
+            return res.status(409).json({ error: "Username sudah digunakan" });
+        }
+        console.error(err);
+        res.status(500).json({ error: "Registrasi gagal." });
     }
 });
 
-app.post('/auth/register-admin', async (req, res) => {
-    const { username, password } = req.body;
+// Register Admin (Data masuk ke Neon)
+app.post("/auth/register-admin", async (req, res, next) => {
+    const { username, password } = req.body; 
+    
     if (!username || !password || password.length < 6) {
-        return res.status(400).json({ error: 'Username dan password (min 6 karakter) wajib diisi' });
+        return res.status(400).json({ error: "Username dan password (min 6 char) harus diisi" });
     }
-    const existingUser = users.find(u => u.username === username.toLowerCase());
-    if (existingUser) {
-        return res.status(409).json({ error: 'Username sudah digunakan' });
-    }
+
     try {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-        const newUser = {
-            id: users.length + 1,
-            username: username.toLowerCase(),
-            password: hashedPassword,
-            role: 'admin'
-        };
-        users.push(newUser);
+        
+        const sql =
+            "INSERT INTO users (username, password, role) VALUES ($1, $2, $3) RETURNING id, username, role";
+        const result = await pool.query(sql, [
+            username.toLowerCase(),
+            hashedPassword,
+            "admin", 
+        ]);
+        
         res.status(201).json({
             success: true,
             message: '✅ Registrasi admin berhasil!',
-            user: { id: newUser.id, username: newUser.username, role: newUser.role }
+            user: result.rows[0]
         });
     } catch (err) {
-        res.status(500).json({ error: 'Registrasi gagal: ' + err.message });
+        if (err.code === "23505") {
+            return res.status(409).json({ error: "Username sudah digunakan" });
+        }
+        console.error(err);
+        res.status(500).json({ error: "Registrasi admin gagal." });
     }
 });
 
-app.post('/auth/login', async (req, res) => {
+// Login (Ambil data dari Neon)
+app.post("/auth/login", async (req, res, next) => {
     const { username, password } = req.body;
     try {
-        const user = users.find(u => u.username === username.toLowerCase());
+        // 1. Ambil user dari Neon
+        const sql = "SELECT * FROM users WHERE username = $1";
+        const result = await pool.query(sql, [username.toLowerCase()]);
+        const user = result.rows[0];
+        
         if (!user) {
-            return res.status(401).json({ error: 'Username atau password salah!' });
+            return res.status(401).json({ error: "Username atau password salah!" });
         }
-        // NOTE: Karena password di atas adalah hash dummy, compare akan gagal.
-        // Anda perlu mengganti password dummy di array users dengan hash yang benar
-        // atau mengabaikan sementara proses compare ini untuk testing.
-        // Contoh: const isMatch = await bcrypt.compare(password, user.password);
         
-        // Untuk DEMO, kita asumsikan isMatch selalu true jika user ditemukan:
-        let isMatch = true; 
+        // 2. Bandingkan password
+        const isMatch = await bcrypt.compare(password, user.password);
         
-        if (!isMatch) { 
-            return res.status(401).json({ error: 'Username atau password salah!' }); 
+        if (!isMatch) {
+            return res.status(401).json({ error: "Username atau password salah!" });
         }
-
-        const payload = { user: { id: user.id, username: user.username, role: user.role } };
-        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
-        res.json({
+        
+        // 3. Buat Token
+        const payload = {
+            user: {
+                id: user.id,
+                username: user.username,
+                role: user.role,
+            },
+        };
+        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "1h" });
+        
+        res.json({ 
             success: true,
-            message: '✅ Login berhasil!',
+            message: "✅ Login berhasil", 
             token: token,
-            user: { id: user.id, username: user.username, role: user.role }
+            user: {
+                id: user.id,
+                username: user.username,
+                role: user.role,
+            }
         });
     } catch (err) {
-        res.status(500).json({ error: 'Login gagal: ' + err.message });
+        console.error(err);
+        res.status(500).json({ error: "Login gagal." });
     }
 });
 
 
 // ============================================
-// === PRODUCTS ROUTES (CRUD - NEON IMPLEMENTATION) ===
+// === PRODUCTS ROUTES (CRUD ke NEON) ===
 // ============================================
 
 // GET All Products (Public)
@@ -275,7 +285,6 @@ app.get('/products/:id', async (req, res) => {
 app.post('/products', authenticateToken, async (req, res) => {
     const { name, category, base_price, tax, stock } = req.body;
 
-    // Validasi input
     if (!name || !category || base_price === undefined || tax === undefined || stock === undefined) {
         return res.status(400).json({ error: 'Semua field wajib diisi: name, category, base_price, tax, stock' });
     }
@@ -313,7 +322,6 @@ app.put('/products/:id', [authenticateToken, authorizeRole('admin')], async (req
     const { name, category, base_price, tax, stock } = req.body;
     
     try {
-        // 1. Ambil data lama untuk fallback dan hitungan
         const existingProductResult = await pool.query('SELECT * FROM products WHERE id = $1', [productId]);
         
         if (existingProductResult.rows.length === 0) {
@@ -322,20 +330,17 @@ app.put('/products/:id', [authenticateToken, authorizeRole('admin')], async (req
         
         const current = existingProductResult.rows[0];
 
-        // Tentukan nilai baru atau gunakan nilai lama
         const newName = name || current.name;
         const newCategory = category || current.category;
         const newBasePrice = base_price !== undefined ? base_price : current.base_price;
         const newTax = tax !== undefined ? tax : current.tax;
         const newStock = stock !== undefined ? stock : current.stock;
         
-        // HITUNG ULANG HARGA FINAL
         const newHargaFinal = calculateFinalPrice(newBasePrice, newTax);
 
-        // 2. Lakukan update
         const query = `
             UPDATE products 
-            SET name = $1, category = $2, base_2, tax = $4, stock = $5, harga_final = $6, updated_by = $7, updated_at = NOW()
+            SET name = $1, category = $2, base_price = $3, tax = $4, stock = $5, harga_final = $6, updated_by = $7, updated_at = NOW()
             WHERE id = $8
             RETURNING *
         `;
@@ -377,6 +382,77 @@ app.delete('/products/:id', [authenticateToken, authorizeRole('admin')], async (
     }
 });
 
+// ============================================
+// === HELPER ENDPOINTS (Neon Based) ===
+// ============================================
+
+// Reset semua data (untuk testing)
+app.post('/reset', [authenticateToken, authorizeRole('admin')], async (req, res) => {
+    try {
+        // Reset Products
+        await pool.query('DELETE FROM products');
+        await pool.query('ALTER SEQUENCE products_id_seq RESTART WITH 1');
+        // Reset Users (Opsional, tapi bagus untuk testing)
+        await pool.query('DELETE FROM users'); 
+        await pool.query('ALTER SEQUENCE users_id_seq RESTART WITH 1');
+        
+        res.json({
+            success: true,
+            message: '✅ Semua data produk & pengguna di Neon berhasil direset!'
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Gagal mereset data di Neon: ' + err.message });
+    }
+});
+
+// Seed data (isi data dummy untuk testing)
+app.post('/seed', [authenticateToken, authorizeRole('admin')], async (req, res) => {
+    const seedData = [
+        { name: "Nasi Tempong", category: "Food", base_price: 20000, tax: 2000, stock: 50 },
+        { name: "Rawon Banyuwangi", category: "Food", base_price: 25000, tax: 2500, stock: 30 },
+        { name: "Es Teh Manis", category: "Beverage", base_price: 5000, tax: 500, stock: 100 }
+    ];
+
+    try {
+        // Reset Products
+        await pool.query('DELETE FROM products');
+        await pool.query('ALTER SEQUENCE products_id_seq RESTART WITH 1'); 
+
+        const client = await pool.connect();
+        await client.query('BEGIN'); 
+
+        const insertedProducts = [];
+        for (const item of seedData) {
+            const harga_final = calculateFinalPrice(item.base_price, item.tax);
+            const query = `
+                INSERT INTO products (name, category, base_price, tax, stock, harga_final, created_by)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                RETURNING *
+            `;
+            const values = [
+                item.name, item.category, item.base_price, item.tax, 
+                item.stock, harga_final, req.user.username
+            ];
+            const result = await client.query(query, values);
+            insertedProducts.push(formatProductResponse(result.rows[0]));
+        }
+
+        await client.query('COMMIT'); 
+        client.release();
+
+        res.json({
+            success: true,
+            message: `✅ ${insertedProducts.length} data dummy berhasil ditambahkan ke Neon!`,
+            total: insertedProducts.length,
+            data: insertedProducts
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Gagal menambahkan data dummy ke Neon: ' + err.message });
+    }
+});
 
 // ============================================
 // === ERROR HANDLING & START SERVER ===
@@ -390,21 +466,27 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Terjadi kesalahan pada server' });
 });
 
-// === START SERVER ===
+// === START SERVER FUNCTION ===
 async function startServer() {
     try {
-        // 1. Pastikan tabel produk dibuat
+        console.log("⏳ Mencoba koneksi ke Neon dan memastikan tabel siap...");
+        
+        // 1. Pastikan tabel dibuat
         await createProductsTable(); 
+        console.log("✅ Tabel 'products' sudah siap atau berhasil dibuat.");
+        await createUsersTable(); // ✅ PENTING: Tabel users juga dibuat!
+        console.log("✅ Tabel 'users' sudah siap atau berhasil dibuat.");
         
         // 2. Mulai server Express
         app.listen(PORT, '0.0.0.0', () => {
             console.log(`\n🚀 Vendor C API (Neon Ready) berjalan di http://localhost:${PORT}`);
             console.log("---------------------------------------------------------------");
-            console.log("💡 Pastikan service Neon Anda aktif dan DATABASE_URL sudah benar.");
+            console.log("💡 GUNAKAN POST /auth/register-admin terlebih dahulu untuk membuat akun admin awal.");
             console.log("---------------------------------------------------------------");
         });
     } catch (e) {
-        console.error("⛔ Server gagal dimulai karena masalah database. Cek konfigurasi Neon Anda.");
+        console.error("\n⛔ Server GAGAL DIMULAI. Pastikan DATABASE_URL di .env sudah benar dan Neon Service Anda AKTIF.");
+        console.error("Detail Error:", e.message);
     }
 }
 
