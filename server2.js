@@ -1,10 +1,10 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const db = require('./db.js');                 // ✔ path sudah benar
+const db = require('./db.js');                 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { authenticateToken, authorizeRole } = require('./middleware/auth.js'); // ✔ path benar
+const { authenticateToken, authorizeRole } = require('./auth.js');
 
 const app = express();
 const router = express.Router();
