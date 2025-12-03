@@ -4,7 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { authenticateToken, authorizeRole } = require('../middleware/auth.js'); // Asumsi middleware ini ada
+const { authenticateToken, authorizeRole } = require('./auth.js'); // Asumsi middleware ini ada
 
 const app = express();
 const PORT = process.env.PORT_VENDOR_C || 3003;
