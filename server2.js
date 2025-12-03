@@ -15,6 +15,11 @@ const JWT_SECRET = process.env.JWT_SECRET;
 app.use(cors());
 app.use(express.json());
 
+// Endpoint status 
+app.get("/status", (req, res) => {
+  res.json({ status: "API Vendor is running" });
+});
+
 // ======================================================================
 // GET ALL PRODUCTS
 // ======================================================================
