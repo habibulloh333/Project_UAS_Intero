@@ -5,7 +5,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { Client, Pool } = require('pg'); // Import library 'pg'
-const { authenticateToken, authorizeRole } = require('./middleware/auth.js'); // Diperbaiki path-nya
+const { authenticateToken, authorizeRole } = require('./auth.js'); // Diperbaiki path-nya
 
 const app = express();
 const PORT = process.env.PORT_VENDOR_C || 3003;
