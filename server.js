@@ -122,6 +122,11 @@ app.get('/all-products', async (req, res) => {
     }
 });
 
+app.get("/", (req, res) => {
+  res.send("API berjalan dengan benar");
+});
+
+
 /* ============================================
    START SERVER
 ============================================ */
