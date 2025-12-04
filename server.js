@@ -47,7 +47,7 @@ const formatVendorCProduct = (p) => {
     let nama = p.name;
 
     // Tambahkan Recommended untuk kategori Food
-    if (p.category.toLowerCase() === "food") {
+    if (p.category.toLowerCase() === "makanan") {
         nama = `${nama} (Recommended)`;
     }
 
