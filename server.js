@@ -1,132 +1,114 @@
 require("dotenv").config();
 const express = require("express");
-const cors = require("cors");
 const axios = require("axios");
+const cors = require("cors");
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
-const PORT = process.env.PORT || 4000;
+// === Sesuaikan URL dengan server mahasiswa masing-masing ===
+const URL_VENDOR_A = "http://localhost:3001/api/vendor-a/products";
+const URL_VENDOR_B = "http://localhost:3300/vendor-b/fashion";
+const URL_VENDOR_C = "http://localhost:3003/products";
 
-/* =============================
-   BASE URL Vendor 1, 2, 3
-============================= */
-const VENDOR_A_URL = "http://localhost:3001/api/vendor-a/products";
-const VENDOR_B_URL = "http://localhost:3300/vendor-b/fashion";
-const VENDOR_C_URL = "http://localhost:3003/products";
+// ============================================================
+//                 FUNGSI NORMALISASI DATA
+// ============================================================
 
-/* =============================
-   NORMALISASI VENDOR A
-============================= */
-function mapVendorA(item) {
+// --- Normalisasi Vendor A (Mahasiswa 1) ---
+function normalizeVendorA(item) {
+  const harga = parseInt(item.hrg); // string → integer
+
+  // diskon 10%
+  const diskon = harga * 0.10;
+  const harga_final = harga - diskon;
+
   return {
-    sku: item.kd_produk,
+    id: item.kd_produk,
     name: item.nm_brg,
-    price: Number(item.hrg) - Number(item.hrg) * 0.1, // discount 10%
-    available: item.ket_stok === "ada" ? "tersedia" : "tidak",
-    vendor: "Vendor A",
-    extra: null
+    price_final: harga_final,
+    stock: item.ket_stok, // "ada" / "habis"
+    vendor: "Vendor A"
   };
 }
 
-/* =============================
-   NORMALISASI VENDOR B
-============================= */
-function mapVendorB(item) {
+// --- Normalisasi Vendor B (Mahasiswa 2) ---
+function normalizeVendorB(item) {
   return {
-    sku: item.sku,
+    id: item.sku,
     name: item.productName,
-    price: item.price,
-    available: item.isAvailable === "yes" ? "tersedia" : "tidak",
-    vendor: "Vendor B",
-    extra: null
+    price_final: item.price,
+    stock: item.isAvailable ? "Tersedia" : "Tidak Tersedia",
+    vendor: "Vendor B"
   };
 }
 
-/* =============================
-   NORMALISASI VENDOR C
-   (dibuat fleksibel karena vendor C return {success, data})
-============================= */
-function mapVendorC(item) {
+// --- Normalisasi Vendor C (Mahasiswa 3) ---
+function normalizeVendorC(item) {
+  let finalName = item.details.name;
+
+  // Tambahkan label Recommended jika Food
+  if (item.details.category === "Food") {
+    finalName += " (Recommended)";
+  }
+
   return {
-    sku: item.id,
-    name: item.details?.name,
-    price: item.pricing?.harga_final,
-    available: item.stock > 0 ? "tersedia" : "tidak",
-    vendor: "Vendor C",
-    extra: {
-      category: item.details?.category,
-      recommended:
-        item.details?.category?.toLowerCase() === "food" ? true : false
-    }
+    id: item.id,
+    name: finalName,
+    price_final: item.pricing.base_price + item.pricing.tax,
+    stock: item.stock,
+    vendor: "Vendor C"
   };
 }
 
-/* =============================
-   FIX: HANDLING STRUKTUR DATA MISMATCH
-============================= */
-function extractDataVendorC(raw) {
-  // vendor C bisa return array langsung → []
-  if (Array.isArray(raw)) {
-    return raw;
-  }
+// ============================================================
+//               ROUTE UTAMA AGGREGASI DATA
+// ============================================================
 
-  // vendor C bisa return: {success:true, total:3, data:[...]}
-  if (raw?.data && Array.isArray(raw.data)) {
-    return raw.data;
-  }
-
-  // fallback
-  return [];
-}
-
-/* =============================
-   ROUTE AGGREGATOR
-============================= */
-app.get("/products", async (req, res) => {
+app.get("/aggregate", async (req, res) => {
   try {
-    const [A, B, C] = await Promise.all([
-      axios.get(VENDOR_A_URL).catch(() => ({ data: [] })),
-      axios.get(VENDOR_B_URL).catch(() => ({ data: [] })),
-      axios.get(VENDOR_C_URL).catch(() => ({ data: [] }))
+    // --- Ambil data dari tiga vendor ---
+    const [v1, v2, v3] = await Promise.all([
+      axios.get(URL_VENDOR_A),
+      axios.get(URL_VENDOR_B),
+      axios.get(URL_VENDOR_C),
     ]);
 
-    console.log("Raw Vendor A:", A.data);
-    console.log("Raw Vendor B:", B.data);
-    console.log("Raw Vendor C:", C.data);
+    const vendorAData = v1.data.map(normalizeVendorA);
+    const vendorBData = v2.data.map(normalizeVendorB);
+    const vendorCData = v3.data.data
+      ? v3.data.data.map(normalizeVendorC)
+      : v3.data.map(normalizeVendorC);
 
-    /** VENDOR A */
-    const vendorA = Array.isArray(A.data)
-      ? A.data.map(mapVendorA)
-      : [];
-
-    /** VENDOR B */
-    const vendorB = Array.isArray(B.data)
-      ? B.data.map(mapVendorB)
-      : [];
-
-    /** VENDOR C — fleksibel */
-    const vendorCraw = extractDataVendorC(C.data);
-    const vendorC = vendorCraw.map(mapVendorC);
-
-    /** FINAL OUTPUT */
-    const finalOutput = [...vendorA, ...vendorB, ...vendorC];
+    // Gabungkan semua menjadi satu format seragam
+    const finalOutput = [
+      ...vendorAData,
+      ...vendorBData,
+      ...vendorCData
+    ];
 
     res.json({
-      status: "success",
+      success: true,
       total: finalOutput.length,
       data: finalOutput
     });
 
   } catch (err) {
-    console.error("Aggregator error:", err.message);
-    res.status(500).json({ error: "Aggregator gagal mengambil data" });
+    console.error("ERROR AGGREGATOR:", err.message);
+    res.status(500).json({ 
+      success: false,
+      error: "Gagal mengambil atau menggabungkan data vendor",
+      details: err.message
+    });
   }
 });
 
-/* =============================
-   RUN SERVER
-============================= */
+// ============================================================
+//                    JALANKAN SERVER
+// ============================================================
+
+const PORT = 4000;
 app.listen(PORT, () => {
-  console.log(`Aggregator running at http://localhost:${PORT}`);
+  console.log(`Integrator berjalan di http://localhost:${PORT}/aggregate`);
 });
