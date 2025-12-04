@@ -85,6 +85,22 @@ app.get("/api/products/normalized", async (req, res) => {
       ...dataC.map(p => ({ ...p, source: 'Vendor C' }))
     ];
 
+    // ... setelah Promise.allSettled
+console.log("=== DEBUG ===");
+console.log("Response A Status:", responseA.status);
+if (responseA.status === 'rejected') {
+  console.log("Error from Vendor A:", responseA.reason);
+}
+console.log("Response B Status:", responseB.status);
+if (responseB.status === 'rejected') {
+  console.log("Error from Vendor B:", responseB.reason);
+}
+console.log("Response C Status:", responseC.status);
+if (responseC.status === 'rejected') {
+  console.log("Error from Vendor C:", responseC.reason);
+}
+console.log("=== END DEBUG ===");
+
     // Normalisasi setiap produk
     const normalizedProducts = allProducts.map(product => normalizeProduct(product, product.source));
 
