@@ -18,7 +18,7 @@ app.use(express.json());
 
 // Vendor A (Mahasiswa 1)
 const formatVendorAProduct = (p) => ({
-    vendor: "Vendor A (Elektronik)",
+    vendor: "Vendor A (Warung Klontong)",
     code: p.kd_produk,
     name: p.nm_brg,
     price: p.hrg,
@@ -27,7 +27,7 @@ const formatVendorAProduct = (p) => ({
 
 // Vendor B (Mahasiswa 2)
 const formatVendorBProduct = (p) => ({
-    vendor: "Vendor B (Fashion)",
+    vendor: "Vendor B (Distro Fashion)",
     code: p.sku,
     name: p.productName,
     price: p.price,
@@ -36,7 +36,7 @@ const formatVendorBProduct = (p) => ({
 
 // Vendor C (Mahasiswa 3)
 const formatVendorCProduct = (p) => ({
-    vendor: "Vendor C (Resto)",
+    vendor: "Vendor C (Resto dan Kuliner)",
     code: p.id,
     name: p.name,
     price: p.harga_final,
