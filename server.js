@@ -39,7 +39,7 @@ const formatVendorBProduct = (p) => ({
     sku: p.sku,
     productName: p.productName,
     price: p.price,
-    isAvailable: p.isAvailable ? "Tersedia" : "Habis",
+    isAvailable: p.isAvailable,
 });
 
 // Vendor C (Mahasiswa 3) — Food → Recommended

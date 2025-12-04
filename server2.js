@@ -154,6 +154,12 @@ app.post('/vendor-b/fashion', authenticateToken, async (req, res, next) => {
     });
   }
 
+  if (isAvailable !== "Tersedia" && isAvailable !== "Habis") {
+      return res
+        .status(400)
+        .json({ error: "isAvailable harus 'Tersedia' atau 'Habis'." });
+    }
+
   const sql = `
     INSERT INTO vendor_b_products (sku, product_name, price, is_available)
     VALUES ($1, $2, $3, $4)
