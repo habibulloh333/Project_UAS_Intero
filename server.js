@@ -1,114 +1,122 @@
 require("dotenv").config();
 const express = require("express");
-const axios = require("axios");
 const cors = require("cors");
-
+const axios = require("axios"); // Gunakan npm install axios
 const app = express();
+const PORT = 5000; // Port untuk Lead Integrator
+
 app.use(cors());
 app.use(express.json());
 
-// === Sesuaikan URL dengan server mahasiswa masing-masing ===
-const URL_VENDOR_A = "http://localhost:3001/api/vendor-a/products";
-const URL_VENDOR_B = "http://localhost:3300/vendor-b/fashion";
-const URL_VENDOR_C = "http://localhost:3003/products";
-
-// ============================================================
-//                 FUNGSI NORMALISASI DATA
-// ============================================================
-
-// --- Normalisasi Vendor A (Mahasiswa 1) ---
-function normalizeVendorA(item) {
-  const harga = parseInt(item.hrg); // string → integer
-
-  // diskon 10%
-  const diskon = harga * 0.10;
-  const harga_final = harga - diskon;
-
-  return {
-    id: item.kd_produk,
-    name: item.nm_brg,
-    price_final: harga_final,
-    stock: item.ket_stok, // "ada" / "habis"
-    vendor: "Vendor A"
+// --- Fungsi Normalisasi ---
+const normalizeProduct = (product, source) => {
+  let normalized = {
+    source: source,
+    id: null,
+    name: "",
+    price: 0,
+    stock_status: "Habis" // Default jika tidak bisa ditentukan
   };
-}
 
-// --- Normalisasi Vendor B (Mahasiswa 2) ---
-function normalizeVendorB(item) {
-  return {
-    id: item.sku,
-    name: item.productName,
-    price_final: item.price,
-    stock: item.isAvailable ? "Tersedia" : "Tidak Tersedia",
-    vendor: "Vendor B"
-  };
-}
+  switch (source) {
+    case 'Vendor A':
+      normalized.id = product.kd_produk;
+      normalized.name = product.nm_brg;
+      // 2. Data dari M1 harus diubah dari string "15000" menjadi integer 15000.
+      // 3. Data dari M1 status "ada" harus tetap, tapi "habis" harus dipastikan konsisten.
+      normalized.price = Math.round(parseFloat(product.hrg));
+      normalized.stock_status = product.ket_stok;
+      // 6. Jika produk berasal dari Vendor A (Warung) , berikan Diskon 10% pada harga_final.
+      normalized.price = Math.round(normalized.price * 0.9);
+      break;
 
-// --- Normalisasi Vendor C (Mahasiswa 3) ---
-function normalizeVendorC(item) {
-  let finalName = item.details.name;
+    case 'Vendor B':
+      normalized.id = product.sku;
+      normalized.name = product.productName;
+      normalized.price = product.price;
+      // 4. Data dari M2 status true harus diubah jadi string "Tersedia".
+      normalized.stock_status = product.isAvailable ? "Tersedia" : "Habis";
+      // 8. Produk dari Vendor B tidak ada perubahan (selain mapping status).
+      break;
 
-  // Tambahkan label Recommended jika Food
-  if (item.details.category === "Food") {
-    finalName += " (Recommended)";
+    case 'Vendor C':
+      normalized.id = product.id;
+      normalized.name = product.details.name;
+      // 5. Data dari M3 harga harus dijumlahkan (base_price + tax) menjadi harga_final.
+      normalized.price = product.pricing.base_price + product.pricing.tax;
+      // 7. Jika produk berasal dari Vendor C (Resto) , dan kategorinya adalah "Food", tambahkan label "(Recommended)" di belakang nama produk.
+      if (product.details.category === "Food") {
+        normalized.name = `${normalized.name} (Recommended)`;
+      }
+      // Asumsi stock > 0 berarti Tersedia
+      normalized.stock_status = product.stock > 0 ? "Tersedia" : "Habis";
+      break;
+
+    default:
+      console.error(`Sumber tidak dikenal: ${source}`);
   }
+  return normalized;
+};
 
-  return {
-    id: item.id,
-    name: finalName,
-    price_final: item.pricing.base_price + item.pricing.tax,
-    stock: item.stock,
-    vendor: "Vendor C"
-  };
-}
-
-// ============================================================
-//               ROUTE UTAMA AGGREGASI DATA
-// ============================================================
-
-app.get("/aggregate", async (req, res) => {
+// --- Endpoint untuk mengambil dan menormalisasi data dari semua vendor ---
+app.get("/api/products/normalized", async (req, res) => {
   try {
-    // --- Ambil data dari tiga vendor ---
-    const [v1, v2, v3] = await Promise.all([
-      axios.get(URL_VENDOR_A),
-      axios.get(URL_VENDOR_B),
-      axios.get(URL_VENDOR_C),
+    console.log("Mengambil data dari semua vendor...");
+
+    // Ambil data dari ketiga API vendor
+    const [responseA, responseB, responseC] = await Promise.allSettled([
+      axios.get("http://localhost:3001/api/vendor-a/products"), // Ganti dengan URL M1 Anda
+      axios.get("http://localhost:3300/vendor-b/fashion"),      // Ganti dengan URL M2 Anda
+      axios.get("http://localhost:3003/products")               // Ganti dengan URL M3 Anda
     ]);
 
-    const vendorAData = v1.data.map(normalizeVendorA);
-    const vendorBData = v2.data.map(normalizeVendorB);
-    const vendorCData = v3.data.data
-      ? v3.data.data.map(normalizeVendorC)
-      : v3.data.map(normalizeVendorC);
+    const dataA = responseA.status === 'fulfilled' ? responseA.value.data : [];
+    const dataB = responseB.status === 'fulfilled' ? responseB.value.data : [];
+    const dataC = responseC.status === 'fulfilled' ? responseC.value.data.data || responseC.value.data : []; // M3 mungkin punya wrapper 'data'
 
-    // Gabungkan semua menjadi satu format seragam
-    const finalOutput = [
-      ...vendorAData,
-      ...vendorBData,
-      ...vendorCData
+    console.log(`Data dari Vendor A: ${dataA.length} item`);
+    console.log(`Data dari Vendor B: ${dataB.length} item`);
+    console.log(`Data dari Vendor C: ${dataC.length} item`);
+
+    // Gabungkan semua data
+    const allProducts = [
+      ...dataA.map(p => ({ ...p, source: 'Vendor A' })),
+      ...dataB.map(p => ({ ...p, source: 'Vendor B' })),
+      ...dataC.map(p => ({ ...p, source: 'Vendor C' }))
     ];
 
-    res.json({
-      success: true,
-      total: finalOutput.length,
-      data: finalOutput
-    });
+    // Normalisasi setiap produk
+    const normalizedProducts = allProducts.map(product => normalizeProduct(product, product.source));
 
-  } catch (err) {
-    console.error("ERROR AGGREGATOR:", err.message);
-    res.status(500).json({ 
-      success: false,
-      error: "Gagal mengambil atau menggabungkan data vendor",
-      details: err.message
-    });
+    console.log(`Data Normalisasi Selesai. Total Produk: ${normalizedProducts.length}`);
+
+    // Kirim hasil normalisasi
+    res.json(normalizedProducts);
+
+  } catch (error) {
+    console.error("Error saat mengambil atau menormalisasi data:", error);
+    res.status(500).json({ error: "Terjadi kesalahan saat mengambil data dari vendor." });
   }
 });
 
-// ============================================================
-//                    JALANKAN SERVER
-// ============================================================
-
-const PORT = 4000;
-app.listen(PORT, () => {
-  console.log(`Integrator berjalan di http://localhost:${PORT}/aggregate`);
+// Endpoint status untuk M4
+app.get("/status", (req, res) => {
+  res.json({ status: "Lead Integrator API is running" });
 });
+
+// 404 Handler
+app.use((req, res) => {
+  res.status(404).json({ error: "Rute tidak ditemukan" });
+});
+
+// Error Handler
+app.use((err, req, res, next) => {
+  console.error("[SERVER ERROR]", err.stack);
+  res.status(500).json({ error: "Terjadi kesalahan pada server Lead Integrator" });
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server Lead Integrator (Mahasiswa 4) berjalan di http://localhost:${PORT}`);
+});
+
+module.exports = app;
