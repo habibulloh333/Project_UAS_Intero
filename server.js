@@ -65,9 +65,9 @@ app.get("/api/products/normalized", async (req, res) => {
 
     // Ambil data dari ketiga API vendor
     const [responseA, responseB, responseC] = await Promise.allSettled([
-    axios.get("http://localhost:3001/api/vendor-a/products"), // Pastikan port 3001 benar
+    axios.get("http://localhost:3100/api/vendor-a/products"), // Pastikan port 3001 benar
     axios.get("http://localhost:3300/vendor-b/fashion"),      // Port 3300 untuk M2
-    axios.get("http://localhost:3003/products")               // Port 3003 untuk M3
+    axios.get("http://localhost:3200/products")               // Port 3003 untuk M3
     ]);
 
     const dataA = responseA.status === 'fulfilled' ? responseA.value.data : [];
