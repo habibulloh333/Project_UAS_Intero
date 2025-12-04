@@ -23,11 +23,10 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
-// === MIDDLEWARE ===
+// MIDDLEWARE
 app.use(cors());
 app.use(express.json());
 
-// HELPER FUNCTIONS (Pemformatan & Perhitungan) 
 const calculateFinalPrice = (base_price, tax) => {
     if (typeof base_price !== 'number' || typeof tax !== 'number') {
         throw new Error('base_price dan tax harus berupa angka');
@@ -44,7 +43,7 @@ const formatProductResponse = (dbProduct) => ({
     pricing: {
         base_price: dbProduct.base_price,
         tax: dbProduct.tax,
-        harga_final: dbProduct.harga_final // Perhitungan final
+        harga_final: dbProduct.harga_final 
     },
     stock: dbProduct.stock,
     created_by: dbProduct.created_by,
@@ -52,24 +51,9 @@ const formatProductResponse = (dbProduct) => ({
 });
 
 // STATUS ENDPOINT 
-app.get('/status', async (req, res) => {
-    let totalProducts = 0;
-    try {
-        const result = await pool.query('SELECT COUNT(*) FROM products');
-        totalProducts = parseInt(result.rows[0].count);
-    } catch (e) {
-        console.error("Warning: Gagal menghitung produk, tabel mungkin belum dibuat.");
-    }
-
-    res.json({ 
-        ok: true, 
-        service: 'vendor-c-resto-api',
-        vendor: 'Vendor C - Resto & Kuliner Banyuwangi',
-        total_products: totalProducts
-    });
+app.get("/status", (req, res) => {
+  res.json({ status: "API Vendor A is running" });
 });
-
-// AUTH ROUTES (CRUD ke NEON)
 
 // Register (Digunakan untuk User dan Admin)
 const registerUser = async (req, res, role) => {
