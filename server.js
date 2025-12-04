@@ -1,106 +1,116 @@
-import express from "express";
-import axios from "axios";
-import cors from "cors";
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
+const axios = require("axios");
+const { Pool } = require("pg");
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
+// =============================
+// PORT + DATABASE
+// =============================
 const PORT = process.env.PORT || 4000;
 
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
+
 // =============================
-// BASE URL Server M1, M2, M3 
+// URL Server M1, M2, M3 
 // =============================
+
+// Vendor A (Mahasiswa 1)
 const VENDOR_A_URL = "http://localhost:3001/api/vendor-a/products";
+
+// Vendor B (Mahasiswa 2)
 const VENDOR_B_URL = "http://localhost:3300/vendor-b/fashion";
+
+// Vendor C (Mahasiswa 3)
 const VENDOR_C_URL = "http://localhost:3003/products";
 
 // =============================
-// NORMALISASI VENDOR A
+// NORMALISASI DATA
 // =============================
+
+// Vendor A → FORMAT: kd_produk, nm_brg, hrg, ket_stok
 function mapVendorA(item) {
-    const originalPrice = parseInt(item.hrg);
-    const finalPrice = originalPrice * 0.9;  // Diskon 10%
-
-    return {
-        vendor: "A",
-        name: item.nm_brg,
-        original_price: originalPrice,
-        price: finalPrice,
-        status: item.ket_stok === "ada" ? "Tersedia" : "Habis",
-        label: "Diskon 10%"
-    };
+  return {
+    sku: item.kd_produk,
+    name: item.nm_brg,
+    price: Number(item.hrg) * 0.9, // DISKON 10%
+    available: item.ket_stok === "ada" ? "tersedia" : "tidak",
+    vendor: "Vendor A",
+    extra: null,
+  };
 }
-// =============================
-// NORMALISASI VENDOR B
-// =============================
+
+// Vendor B → FORMAT: sku, productName, price, isAvailable
 function mapVendorB(item) {
-    return {
-        vendor: "B",
-        name: item.productName,
-        price: Number(item.price),
-        status: item.isAvailable,
-        label: null
-    };
+  return {
+    sku: item.sku,
+    name: item.productName,
+    price: Number(item.price),
+    available: item.isAvailable === true || item.isAvailable === "yes" ? "tersedia" : "tidak",
+    vendor: "Vendor B",
+    extra: null,
+  };
 }
 
-// =============================
-// NORMALISASI VENDOR C
-// =============================
+// Vendor C → NESTED OBJECT
 function mapVendorC(item) {
-    let name = item.details.name;
-
-    // Tambah label Recommended jika kategori Food
-    if (item.details.category.toLowerCase() === "food") {
-        name += " (Recommended)";
+  return {
+    sku: "C" + item.id, // Biar seragam
+    name: item.details.name,
+    price: item.pricing.harga_final,
+    available: item.stock > 0 ? "tersedia" : "tidak",
+    vendor: "Vendor C",
+    extra: {
+      category: item.details.category,
+      recommended: item.details.category.toLowerCase() === "food"
     }
-
-    return {
-        vendor: "C",
-        name: name,
-        price: Number(item.pricing.harga_final),
-        status: item.stock > 0 ? "Tersedia" : "Habis",
-        label: item.details.category
-    };
+  };
 }
 
-// =============================
-// ENDPOINT AGGREGATOR UTAMA
-// =============================
-app.get("/all-products", async (req, res) => {
-    try {
-        const [aRes, bRes, cRes] = await Promise.all([
-            axios.get(VENDOR_A_URL),
-            axios.get(VENDOR_B_URL),
-            axios.get(VENDOR_C_URL)
-        ]);
+// ========================================
+//  GET AGGREGATED PRODUCTS
+// ========================================
+app.get("/products", async (req, res) => {
+  try {
+    const [aRes, bRes, cRes] = await Promise.all([
+      axios.get(VENDOR_A_URL).catch(() => ({ data: [] })),
+      axios.get(VENDOR_B_URL).catch(() => ({ data: [] })),
+      axios.get(VENDOR_C_URL).catch(() => ({ data: [] })),
+    ]);
 
-        // Mapping hasil normalisasi
-        const vendorA = aRes.data.map(mapVendorA);
-        const vendorB = bRes.data.map(mapVendorB);
-        const vendorC = cRes.data.data.map(mapVendorC);
+    const vendorA = aRes.data.map(mapVendorA);
+    const vendorB = bRes.data.map(mapVendorB);
+    const vendorC = cRes.data.data ? cRes.data.data.map(mapVendorC) : [];
 
-        // Gabungkan semua
-        const finalOutput = [...vendorA, ...vendorB, ...vendorC];
+    const finalData = [...vendorA, ...vendorB, ...vendorC];
 
-        res.json({
-            total: finalOutput.length,
-            data: finalOutput
-        });
+    // OPSIONAL: Simpan ke database aggregator
+    await pool.query(
+      `INSERT INTO aggregated_products (total_items, created_at)
+       VALUES ($1, NOW())`,
+      [finalData.length]
+    );
 
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Gagal mengambil data vendor" });
-    }
+    res.json({
+      status: "success",
+      total: finalData.length,
+      data: finalData,
+    });
+
+  } catch (error) {
+    console.error("Aggregator error:", error.message);
+    res.status(500).json({ error: "Gagal menggabungkan data vendor" });
+  }
 });
 
-// =============================
-// STATUS
-// =============================
-app.get("/", (req, res) => {
-    res.json({ message: "Aggregator Mahasiswa 4 is running" });
-});
-
-// =============================
+// ========================================
 app.listen(PORT, () => {
-    console.log(`Aggregator running at http://localhost:${PORT}`);
+  console.log(`Aggregator running at http://localhost:${PORT}`);
 });
