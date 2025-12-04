@@ -39,7 +39,7 @@ const formatVendorBProduct = (p) => ({
     sku: p.sku,
     productName: p.productName,
     price: p.price,
-    isAvailable: p.isAvailable ? "ada" : "habis",
+    isAvailable: p.isAvailable ? "Tersedia" : "Habis",
 });
 
 // Vendor C (Mahasiswa 3) — Food → Recommended
@@ -127,6 +127,6 @@ app.get('/all-products', async (req, res) => {
 ============================================ */
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 API Gateway Mahasiswa 4 berjalan di http://localhost:${PORT}`);
-    console.log(`📌 Endpoint Gabungan: http://localhost:${PORT}/all-products`);
+    console.log(`API Gateway Mahasiswa 4 berjalan di http://localhost:${PORT}`);
+    console.log(`Endpoint Gabungan: http://localhost:${PORT}/all-products`);
 });
