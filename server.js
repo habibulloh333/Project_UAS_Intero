@@ -10,8 +10,8 @@ app.use(cors());
 app.use(express.json());
 
 
-const vendorB = require("./vendorB.json");
-const vendorC = require("./vendorC.json");
+const vendorB = require("./server2.json");
+const vendorC = require("./server3.json");
 
 
 function normalizeVendorB(data) {
@@ -120,7 +120,7 @@ app.get("/admin/dashboard",
   }
 );
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT;
 app.listen(PORT, () => {
   console.log(`Server berjalan di http://localhost:${PORT}`);
 });
