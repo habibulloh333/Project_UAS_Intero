@@ -10,8 +10,8 @@ app.use(cors());
 app.use(express.json());
 
 
-const vendorB = require("./server2.json");
-const vendorC = require("./server3.json");
+const vendorB = require("./server2.js");
+const vendorC = require("./server3.js");
 
 
 function normalizeVendorB(data) {
