@@ -39,13 +39,16 @@ const formatVendorCProduct = (p) => ({
     vendor: "Vendor C (Resto dan Kuliner)",
     code: p.id,
     name: p.name,
-    price: p.harga_final,
-    stock: p.stock > 0 ? "ada" : "habis",
     details: {
+        name: p.name,
+        category: p.category,
+    },
+    pricing: {
         base_price: p.base_price,
         tax: p.tax,
-        category: p.category
-    }
+        price: p.harga_final,
+    },
+    stock: p.stock > 0 ? "ada" : "habis"
 });
 
 /* ============================================
