@@ -1,11 +1,11 @@
-// vendor-c/vendor_c.js (Revisi Akhir dengan PostgreSQL/Neon)
+// vendor-c/vendor_c.js (Versi Final Tanpa Fungsi CREATE TABLE)
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { Pool } = require('pg'); // Library PostgreSQL
-const { authenticateToken, authorizeRole } = require('./auth.js'); // Pastikan path ini benar!
+const { Pool } = require('pg'); 
+const { authenticateToken, authorizeRole } = require('./middleware/auth.js'); // Pastikan path ini benar!
 
 const app = express();
 const PORT = process.env.PORT_VENDOR_C || 3003;
@@ -30,45 +30,8 @@ app.use(cors());
 app.use(express.json());
 
 // ============================================
-// === HELPER & DATABASE FUNCTIONS ===
+// === HELPER FUNCTIONS ===
 // ============================================
-
-/**
- * Membuat tabel 'products' jika belum ada.
- */
-async function createProductsTable() {
-    const query = `
-        CREATE TABLE IF NOT EXISTS products (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(255) NOT NULL,
-            category VARCHAR(255) NOT NULL,
-            base_price INTEGER NOT NULL,
-            tax INTEGER NOT NULL,
-            harga_final INTEGER NOT NULL,
-            stock INTEGER NOT NULL,
-            created_by VARCHAR(255),
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            updated_by VARCHAR(255),
-            updated_at TIMESTAMP WITH TIME ZONE
-        );
-    `;
-    await pool.query(query);
-}
-
-/**
- * Membuat tabel 'users' jika belum ada.
- */
-async function createUsersTable() {
-    const query = `
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username VARCHAR(255) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL,
-            role VARCHAR(50) NOT NULL DEFAULT 'user'
-        );
-    `;
-    await pool.query(query);
-}
 
 const calculateFinalPrice = (base_price, tax) => {
     if (typeof base_price !== 'number' || typeof tax !== 'number') {
@@ -103,7 +66,9 @@ app.get('/status', async (req, res) => {
         const result = await pool.query('SELECT COUNT(*) FROM products');
         totalProducts = parseInt(result.rows[0].count);
     } catch (e) {
-        // Abaikan jika tabel belum dibuat
+        // Jika tabel belum dibuat, ini akan mengembalikan error 500 saat diakses
+        // namun untuk status check kita asumsikan 0 jika gagal terhitung
+        console.error("Warning: Gagal menghitung produk, mungkin tabel belum dibuat.");
     }
 
     res.json({ 
@@ -115,10 +80,10 @@ app.get('/status', async (req, res) => {
 });
 
 // ============================================
-// === AUTH ROUTES (CRUD ke NEON) ===
+// === AUTH ROUTES (CRUD ke NEON - Tabel Users diasumsikan sudah ada) ===
 // ============================================
 
-// Register User (Data masuk ke Neon)
+// Register User
 app.post("/auth/register", async (req, res, next) => {
     const { username, password } = req.body; 
     
@@ -146,7 +111,7 @@ app.post("/auth/register", async (req, res, next) => {
             user: result.rows[0]
         });
     } catch (err) {
-        if (err.code === "23505") { // Unique violation
+        if (err.code === "23505") {
             return res.status(409).json({ error: "Username sudah digunakan" });
         }
         console.error(err);
@@ -154,7 +119,7 @@ app.post("/auth/register", async (req, res, next) => {
     }
 });
 
-// Register Admin (Data masuk ke Neon)
+// Register Admin
 app.post("/auth/register-admin", async (req, res, next) => {
     const { username, password } = req.body; 
     
@@ -188,11 +153,10 @@ app.post("/auth/register-admin", async (req, res, next) => {
     }
 });
 
-// Login (Ambil data dari Neon)
+// Login
 app.post("/auth/login", async (req, res, next) => {
     const { username, password } = req.body;
     try {
-        // 1. Ambil user dari Neon
         const sql = "SELECT * FROM users WHERE username = $1";
         const result = await pool.query(sql, [username.toLowerCase()]);
         const user = result.rows[0];
@@ -201,14 +165,12 @@ app.post("/auth/login", async (req, res, next) => {
             return res.status(401).json({ error: "Username atau password salah!" });
         }
         
-        // 2. Bandingkan password
         const isMatch = await bcrypt.compare(password, user.password);
         
         if (!isMatch) {
             return res.status(401).json({ error: "Username atau password salah!" });
         }
         
-        // 3. Buat Token
         const payload = {
             user: {
                 id: user.id,
@@ -236,13 +198,14 @@ app.post("/auth/login", async (req, res, next) => {
 
 
 // ============================================
-// === PRODUCTS ROUTES (CRUD ke NEON) ===
+// === PRODUCTS ROUTES (CRUD ke NEON - Tabel Products diasumsikan sudah ada) ===
 // ============================================
 
 // GET All Products (Public)
 app.get('/products', async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM products ORDER BY id ASC');
+        // Menggunakan nama tabel 'products' sesuai kode Anda
+        const result = await pool.query('SELECT * FROM products ORDER BY id ASC'); 
         const formattedProducts = result.rows.map(formatProductResponse);
 
         res.json({
@@ -389,10 +352,9 @@ app.delete('/products/:id', [authenticateToken, authorizeRole('admin')], async (
 // Reset semua data (untuk testing)
 app.post('/reset', [authenticateToken, authorizeRole('admin')], async (req, res) => {
     try {
-        // Reset Products
+        // Asumsi nama tabel adalah 'products' dan 'users'
         await pool.query('DELETE FROM products');
         await pool.query('ALTER SEQUENCE products_id_seq RESTART WITH 1');
-        // Reset Users (Opsional, tapi bagus untuk testing)
         await pool.query('DELETE FROM users'); 
         await pool.query('ALTER SEQUENCE users_id_seq RESTART WITH 1');
         
@@ -401,8 +363,9 @@ app.post('/reset', [authenticateToken, authorizeRole('admin')], async (req, res)
             message: '✅ Semua data produk & pengguna di Neon berhasil direset!'
         });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Gagal mereset data di Neon: ' + err.message });
+        // Jika tabel belum ada, ini akan mengembalikan error 500. Ini adalah risiko menghapus create table.
+        console.error("Kesalahan saat reset: Pastikan tabel 'products' dan 'users' sudah dibuat manual.");
+        res.status(500).json({ error: 'Gagal mereset data di Neon. Pastikan tabel sudah dibuat.' });
     }
 });
 
@@ -415,7 +378,6 @@ app.post('/seed', [authenticateToken, authorizeRole('admin')], async (req, res) 
     ];
 
     try {
-        // Reset Products
         await pool.query('DELETE FROM products');
         await pool.query('ALTER SEQUENCE products_id_seq RESTART WITH 1'); 
 
@@ -467,27 +429,14 @@ app.use((err, req, res, next) => {
 });
 
 // === START SERVER FUNCTION ===
-async function startServer() {
-    try {
-        console.log("⏳ Mencoba koneksi ke Neon dan memastikan tabel siap...");
-        
-        // 1. Pastikan tabel dibuat
-        await createProductsTable(); 
-        console.log("✅ Tabel 'products' sudah siap atau berhasil dibuat.");
-        await createUsersTable(); // ✅ PENTING: Tabel users juga dibuat!
-        console.log("✅ Tabel 'users' sudah siap atau berhasil dibuat.");
-        
-        // 2. Mulai server Express
-        app.listen(PORT, '0.0.0.0', () => {
-            console.log(`\n🚀 Vendor C API (Neon Ready) berjalan di http://localhost:${PORT}`);
-            console.log("---------------------------------------------------------------");
-            console.log("💡 GUNAKAN POST /auth/register-admin terlebih dahulu untuk membuat akun admin awal.");
-            console.log("---------------------------------------------------------------");
-        });
-    } catch (e) {
-        console.error("\n⛔ Server GAGAL DIMULAI. Pastikan DATABASE_URL di .env sudah benar dan Neon Service Anda AKTIF.");
-        console.error("Detail Error:", e.message);
-    }
+function startServer() {
+    // Kita tidak perlu menunggu tabel dibuat di sini, langsung start server
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`\n🚀 Vendor C API (Neon Ready) berjalan di http://localhost:${PORT}`);
+        console.log("---------------------------------------------------------------");
+        console.log("❗ PERINGATAN: Pastikan Mahasiswa 2 telah membuat tabel 'products' dan 'users' secara manual di Neon!");
+        console.log("---------------------------------------------------------------");
+    });
 }
 
 startServer();
