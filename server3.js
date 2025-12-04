@@ -52,7 +52,7 @@ const formatProductResponse = (dbProduct) => ({
 
 // STATUS ENDPOINT 
 app.get("/status", (req, res) => {
-  res.json({ status: "API Vendor A is running" });
+  res.json({ status: "API Vendor C is running" });
 });
 
 // Register (Digunakan untuk User dan Admin)
