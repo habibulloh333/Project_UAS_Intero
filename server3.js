@@ -8,7 +8,7 @@ const { Pool } = require('pg');
 const { authenticateToken, authorizeRole } = require('./auth.js'); 
 
 const app = express();
-const PORT = process.env.PORT_VENDOR_C || 3003;
+const PORT = 3100;
 const JWT_SECRET = process.env.JWT_SECRET;
 const DATABASE_URL = process.env.DATABASE_URL;
 
