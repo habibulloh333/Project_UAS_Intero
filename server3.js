@@ -5,7 +5,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg'); 
-const { authenticateToken, authorizeRole } = require('./middleware/auth.js'); // Pastikan path ini benar!
+const { authenticateToken, authorizeRole } = require('./auth.js'); // Pastikan path ini benar!
 
 const app = express();
 const PORT = process.env.PORT_VENDOR_C || 3003;
