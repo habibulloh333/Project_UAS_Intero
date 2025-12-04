@@ -1,5 +1,5 @@
 // ======================
-// Mahasiswa 4 – API Gateway
+// Mahasiswa 4 – API Gateway Final
 // ======================
 require('dotenv').config();
 const express = require('express');
@@ -13,46 +13,60 @@ app.use(cors());
 app.use(express.json());
 
 /* ============================================
-   FORMATTER – Menyamakan semua vendor
+   FORMATTER – Menyamakan format semua vendor
+   + Tambahan Logika Validasi
 ============================================ */
 
-// Vendor A (Mahasiswa 1)
-const formatVendorAProduct = (p) => ({
-    vendor: "Vendor A (Warung Klontong)",
-    code: p.kd_produk,
-    name: p.nm_brg,
-    price: p.hrg,
-    stock: p.ket_stok,
-});
+// Vendor A (Mahasiswa 1) — Diskon 10%
+const formatVendorAProduct = (p) => {
+    const hargaAsli = parseFloat(p.hrg);
+    const hargaFinal = hargaAsli * 0.9; // Diskon 10%
 
-// Vendor B (Mahasiswa 2)
+    return {
+        vendor: "Vendor A (Warung)",
+        code: p.kd_produk,
+        name: p.nm_brg,
+        price_original: hargaAsli,
+        discount: "10%",
+        harga_final: hargaFinal,
+        stock: p.ket_stok
+    };
+};
+
+// Vendor B (Mahasiswa 2) — Tidak ada aturan khusus
 const formatVendorBProduct = (p) => ({
-    vendor: "Vendor B (Distro Fashion)",
+    vendor: "Vendor B (Fashion)",
     code: p.sku,
     name: p.productName,
     price: p.price,
     stock: p.isAvailable ? "ada" : "habis",
 });
 
-// Vendor C (Mahasiswa 3)
-const formatVendorCProduct = (p) => ({
-    vendor: "Vendor C (Resto dan Kuliner)",
-    code: p.id,
-    name: p.name,
-    details: {
-        name: p.name,
+// Vendor C (Mahasiswa 3) — Food → Recommended
+const formatVendorCProduct = (p) => {
+    let nama = p.name;
+
+    // Tambahkan Recommended untuk kategori Food
+    if (p.category.toLowerCase() === "food") {
+        nama = `${nama} (Recommended)`;
+    }
+
+    return {
+        vendor: "Vendor C (Resto)",
+        code: p.id,
+        name: nama,
         category: p.category,
-    },
-    pricing: {
-        base_price: p.base_price,
-        tax: p.tax,
-        price: p.harga_final,
-    },
-    stock: p.stock > 0 ? "ada" : "habis"
-});
+        harga_final: p.harga_final,
+        stock: p.stock > 0 ? "ada" : "habis",
+        details: {
+            base_price: p.base_price,
+            tax: p.tax
+        }
+    };
+};
 
 /* ============================================
-   GET ALL PRODUCTS (Gabungan M1, M2, M3)
+   GET ALL PRODUCTS — Gabungan A + B + C
 ============================================ */
 
 app.get('/all-products', async (req, res) => {
@@ -87,13 +101,16 @@ app.get('/all-products', async (req, res) => {
         `);
         const dataC = resultC.rows.map(formatVendorCProduct);
 
-        // === Gabungkan semua ===
+        // === Gabungan semua data ===
         const all = [...dataA, ...dataB, ...dataC];
 
         res.json({
             success: true,
             total: all.length,
-            sources: ["Mahasiswa 1", "Mahasiswa 2", "Mahasiswa 3"],
+            applied_rules: [
+                "Vendor A: Diskon 10%",
+                "Vendor C (Food): Tambahan label (Recommended)"
+            ],
             data: all
         });
 
@@ -102,7 +119,6 @@ app.get('/all-products', async (req, res) => {
         res.status(500).json({ error: "Gagal membaca data gabungan" });
     }
 });
-
 
 /* ============================================
    START SERVER
