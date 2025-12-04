@@ -11,8 +11,8 @@ app.use(cors());
 app.use(express.json());
 
 // Load data vendor lokal (JSON)
-const vendorB = require("./vendorB.json");
-const vendorC = require("./vendorC.json");
+const vendorB = require("./server2.js");
+const vendorC = require("./server3.js");
 
 //
 // =============================
