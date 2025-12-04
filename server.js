@@ -98,7 +98,7 @@ app.get("/", (req, res) => {
 });
 
 // GET semua produk gabungan
-app.get("/products", authenticateToken, (req, res) => {
+app.get("/products", (req, res) => {
   res.json(getAllProducts());
 });
 
