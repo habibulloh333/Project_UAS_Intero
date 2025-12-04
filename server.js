@@ -23,23 +23,23 @@ const formatVendorAProduct = (p) => {
     const hargaFinal = hargaAsli * 0.9; // Diskon 10%
 
     return {
-        vendor: "Vendor A (Warung)",
-        code: p.kd_produk,
-        name: p.nm_brg,
-        price_original: hargaAsli,
-        discount: "10%",
-        harga_final: hargaFinal,
-        stock: p.ket_stok
+        vendor: "Vendor A (Warung Klontong)",
+        kd_produk: p.kd_produk,
+        nm_brg: p.nm_brg,
+        hrg: hargaAsli,
+        diskon: "10%",
+        harga_diskon: hargaFinal,
+        ket_stok: p.ket_stok
     };
 };
 
 // Vendor B (Mahasiswa 2) — Tidak ada aturan khusus
 const formatVendorBProduct = (p) => ({
-    vendor: "Vendor B (Fashion)",
-    code: p.sku,
-    name: p.productName,
+    vendor: "Vendor B (Distro Fashion)",
+    sku: p.sku,
+    productName: p.productName,
     price: p.price,
-    stock: p.isAvailable ? "ada" : "habis",
+    isAvailable: p.isAvailable ? "ada" : "habis",
 });
 
 // Vendor C (Mahasiswa 3) — Food → Recommended
@@ -52,16 +52,18 @@ const formatVendorCProduct = (p) => {
     }
 
     return {
-        vendor: "Vendor C (Resto)",
-        code: p.id,
-        name: nama,
-        category: p.category,
-        harga_final: p.harga_final,
-        stock: p.stock > 0 ? "ada" : "habis",
+        vendor: "Vendor C (Resto dan Kuliner)",
+        id: p.id,
         details: {
-            base_price: p.base_price,
-            tax: p.tax
-        }
+            name: nama,
+            category: p.category,
+        },
+        pricing: {
+           base_price: p.base_price,
+           tax: p.tax,
+           harga_final: p.harga_final,
+        },     
+        stock: p.stock > 0 ? "ada" : "habis",
     };
 };
 
